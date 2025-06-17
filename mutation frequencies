@@ -1,0 +1,224 @@
+# NPM1 Data
+CancerStudy <- c(
+  "Acute Myeloid Leukemia (TCGA, PanCancer Atlas)",
+  "Uterine Corpus Endometrial Carcinoma (TCGA, PanCancer Atlas)",
+  "Skin Cutaneous Melanoma (TCGA, PanCancer Atlas)",
+  "Colorectal Adenocarcinoma (TCGA, PanCancer Atlas)",
+  "Lung Adenocarcinoma (TCGA, PanCancer Atlas)",
+  "Cervical Squamous Cell Carcinoma (TCGA, PanCancer Atlas)",
+  "Esophageal Adenocarcinoma (TCGA, PanCancer Atlas)",
+  "Head and Neck Squamous Cell Carcinoma (TCGA, PanCancer Atlas)",
+  "Kidney Renal Papillary Cell Carcinoma (TCGA, PanCancer Atlas)",
+  "Liver Hepatocellular Carcinoma (TCGA, PanCancer Atlas)",
+  "Glioblastoma Multiforme (TCGA, PanCancer Atlas)",
+  "Lung Squamous Cell Carcinoma (TCGA, PanCancer Atlas)",
+  "Brain Lower Grade Glioma (TCGA, PanCancer Atlas)",
+  "Adrenocortical Carcinoma",
+  "Bladder Urothelial Carcinoma",
+  "Breast Invasive Carcinoma",
+  "Cholangiocarcinoma",
+  "Diffuse Large B-Cell Lymphoma",
+  "Kidney Chromophobe",
+  "Kidney Renal Clear Cell Carcinoma",
+  "Mesothelioma",
+  "Ovarian Serous Cystadenocarcinoma",
+  "Pancreatic Adenocarcinoma",
+  "Pheochromocytoma and Paraganglioma",
+  "Prostate Adenocarcinoma",
+  "Sarcoma",
+  "Stomach Adenocarcinoma",
+  "Testicular Germ Cell Tumours",
+  "Thymoma",
+  "Thyroid Carcinoma",
+  "Uterine Carcinosarcoma",
+  "Uveal Melanoma"
+)
+
+AlterationFrequency <- c(
+  27,
+  1.7408123791102514,
+  1.5981735159817352,
+  1.1235955056179776,
+  0.88339222614841,
+  0.6872852233676976,
+  0.5494505494505495,
+  0.3883495145631068,
+  0.36231884057971014,
+  0.273224043715847,
+  0.2564102564102564,
+  0.2066115702479339,
+  0.19455252918287938,
+  rep(0, 19)  # zeros
+)
+
+# Create dataframe without AlterationCount
+df <- data.frame(
+  CancerStudy = CancerStudy,
+  AlterationFrequency = AlterationFrequency,
+  stringsAsFactors = FALSE
+)
+
+# Remove "(TCGA, PanCancer Atlas)" from CancerStudy labels
+df$CancerStudy <- str_replace_all(df$CancerStudy, fixed(" (TCGA, PanCancer Atlas)"), "")
+
+# Split non-zero and zero frequency data
+non_zero <- df[df$AlterationFrequency > 0, ]
+zero <- df[df$AlterationFrequency == 0, ]
+
+# Sort non-zero by descending AlterationFrequency
+non_zero <- non_zero[order(-non_zero$AlterationFrequency), ]
+
+# Sort zero alphabetically
+zero <- zero[order(zero$CancerStudy), ]
+
+# Combine back (non-zero first, then zero)
+df_ordered <- rbind(non_zero, zero)
+
+# Set factor levels for plotting to keep order
+df_ordered$CancerStudy <- factor(df_ordered$CancerStudy, levels = df_ordered$CancerStudy)
+
+# Plot with ggplot2 (no mutation counts shown)
+ggplot(df_ordered, aes(x = CancerStudy, y = AlterationFrequency, fill = AlterationFrequency)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  scale_fill_gradient(low = "lightblue", high = "darkblue") +
+  labs(
+    title = "Alteration Frequency by Cancer Study",
+    x = "Cancer Study",
+    y = "Alteration Frequency (%)",
+    fill = "Frequency"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.y = element_text(size = 8)) +
+  ylim(0, max(df_ordered$AlterationFrequency) * 1.1)
+
+# Reverse factor levels so highest freq appears at top after coord_flip()
+df_ordered$CancerStudy <- factor(df_ordered$CancerStudy, levels = rev(df_ordered$CancerStudy))
+
+# Then plot again
+ggplot(df_ordered, aes(x = CancerStudy, y = AlterationFrequency, fill = AlterationFrequency)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  scale_fill_gradient(low = "lightblue", high = "darkblue", limits = c(0, 30)) +
+  labs(
+    x = "TCGA PanCancer Atlas Study",
+    y = "Alteration Frequency (%)",
+    fill = "Frequency") +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.x = element_text(size = 10)) +
+  theme(axis.text.y = element_text(size = 10)) +
+  theme(panel.grid.minor = element_blank()) +
+  ylim(0, 30)
+
+
+# AHNAK data
+CancerStudy <- c(
+  "Uterine Corpus Endometrial Carcinoma (TCGA, PanCancer Atlas)",
+  "Skin Cutaneous Melanoma (TCGA, PanCancer Atlas)",
+  "Lung Adenocarcinoma (TCGA, PanCancer Atlas)",
+  "Lung Squamous Cell Carcinoma (TCGA, PanCancer Atlas)",
+  "Uterine Carcinosarcoma (TCGA, PanCancer Atlas)",
+  "Stomach Adenocarcinoma (TCGA, PanCancer Atlas)",
+  "Bladder Urothelial Carcinoma (TCGA, PanCancer Atlas)",
+  "Colorectal Adenocarcinoma (TCGA, PanCancer Atlas)",
+  "Head and Neck Squamous Cell Carcinoma (TCGA, PanCancer Atlas)",
+  "Cholangiocarcinoma (TCGA, PanCancer Atlas)",
+  "Cervical Squamous Cell Carcinoma (TCGA, PanCancer Atlas)",
+  "Glioblastoma Multiforme (TCGA, PanCancer Atlas)",
+  "Ovarian Serous Cystadenocarcinoma (TCGA, PanCancer Atlas)",
+  "Sarcoma (TCGA, PanCancer Atlas)",
+  "Liver Hepatocellular Carcinoma (TCGA, PanCancer Atlas)",
+  "Esophageal Adenocarcinoma (TCGA, PanCancer Atlas)",
+  "Breast Invasive Carcinoma (TCGA, PanCancer Atlas)",
+  "Kidney Renal Papillary Cell Carcinoma (TCGA, PanCancer Atlas)",
+  "Acute Myeloid Leukemia (TCGA, PanCancer Atlas)",
+  "Diffuse Large B-Cell Lymphoma (TCGA, PanCancer Atlas)",
+  "Kidney Renal Clear Cell Carcinoma (TCGA, PanCancer Atlas)",
+  "Pheochromocytoma and Paraganglioma (TCGA, PanCancer Atlas)",
+  "Pancreatic Adenocarcinoma (TCGA, PanCancer Atlas)",
+  "Prostate Adenocarcinoma (TCGA, PanCancer Atlas)",
+  "Mesothelioma (TCGA, PanCancer Atlas)",
+  "Adrenocortical Carcinoma (TCGA, PanCancer Atlas)",
+  "Brain Lower Grade Glioma (TCGA, PanCancer Atlas)",
+  "Thyroid Carcinoma (TCGA, PanCancer Atlas)",
+  "Kidney Chromophobe",
+  "Testicular Germ Cell Tumours",
+  "Thymoma",
+  "Uveal Melanoma"
+)
+
+AlterationFrequency <- c(
+  17.79497098646035,
+  16.210045662100455,
+  12.014134275618375,
+  11.983471074380166,
+  10.526315789473683,
+  10.091743119266056,
+  10,
+  9.737827715355806,
+  8.737864077669903,
+  8.333333333333332,
+  5.841924398625429,
+  5.128205128205128,
+  4.97131931166348,
+  4.705882352941177,
+  3.825136612021858,
+  3.296703296703297,
+  2.6266416510318953,
+  2.536231884057971,
+  2.5,
+  2.4390243902439024,
+  2.2388059701492535,
+  1.6853932584269662,
+  1.675977653631285,
+  1.417004048582996,
+  1.1627906976744187,
+  1.098901098901099,
+  0.9727626459143969,
+  0.408997955010225,
+  0,
+  0,
+  0,
+  0
+)
+
+# Create dataframe
+df <- data.frame(
+  CancerStudy = CancerStudy,
+  AlterationFrequency = AlterationFrequency,
+  stringsAsFactors = FALSE
+)
+
+# Remove "(TCGA, PanCancer Atlas)" from labels
+df$CancerStudy <- str_replace_all(df$CancerStudy, fixed(" (TCGA, PanCancer Atlas)"), "")
+
+# Split non-zero and zero frequencies
+non_zero <- df[df$AlterationFrequency > 0, ]
+zero <- df[df$AlterationFrequency == 0, ]
+
+# Sort non-zero by descending frequency
+non_zero <- non_zero[order(-non_zero$AlterationFrequency), ]
+
+# Sort zero alphabetically
+zero <- zero[order(zero$CancerStudy), ]
+
+# Combine back (non-zero first, then zero)
+df_ordered <- rbind(non_zero, zero)
+
+# Set factor levels in the order we want to plot
+df_ordered$CancerStudy <- factor(df_ordered$CancerStudy, levels = rev(df_ordered$CancerStudy))
+
+# Then plot again
+ggplot(df_ordered, aes(x = CancerStudy, y = AlterationFrequency, fill = AlterationFrequency)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  scale_fill_gradient(low = "lightblue", high = "darkblue", limits = c(0, 30)) +
+  labs(
+    x = "TCGA PanCancer Atlas Study",
+    y = "Alteration Frequency (%)",
+    fill = "Frequency") +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.x = element_text(size = 10)) +
+  theme(axis.text.y = element_text(size = 10)) +
+  theme(panel.grid.minor = element_blank()) +
+  ylim(0, 30)
