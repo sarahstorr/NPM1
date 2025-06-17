@@ -1,0 +1,31 @@
+# Load the tab-delimited text file
+data <- read.delim("C:/Users/mrzsjs1/Desktop/DanBooth/heatmap_data.txt", header = TRUE, sep = "\t")
+
+# Set the first column (sample IDs) as row names
+rownames(data) <- data[, 1]
+
+# Remove the first column so that the data frame only contains numeric gene expression values
+data <- data[, -1]
+
+# Check the first few rows to confirm it looks correct
+head(data)
+
+cor_matrix <- cor(data, method = "pearson")
+
+library(pheatmap)
+
+# Define smooth gradient: steel grey -> white -> red
+colors <- colorRampPalette(c("steelblue4", "white", "red"))(300)
+
+# Breaks evenly spaced between -1 and 1
+breaks <- seq(-1, 1, length.out = length(colors) + 1)
+
+pheatmap(cor_matrix,
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         color = colors,
+         breaks = breaks,
+         fontsize_row = 8,
+         fontsize_col = 8,
+         cellwidth = 8,   # set equal width and height
+         cellheight = 8,)
