@@ -1,0 +1,106 @@
+library(tidyr)
+library(dplyr)
+library(stringr)
+library(pheatmap)
+
+# Load data
+data <- read.delim("C:/Users/mrzsjs1/Downloads/sample_matrix (7).txt", stringsAsFactors = FALSE)
+
+# Extract fields
+data <- data %>%
+  mutate(
+    FullStudyID = str_extract(`studyID.sampleId`, "^[^:]+"),
+    CancerCode = toupper(str_extract(FullStudyID, "^[a-zA-Z]+")),
+    Sample_ID = str_extract(`studyID.sampleId`, "(?<=:).*")
+  )
+
+# Sample counts
+sample_counts <- data %>%
+  select(CancerCode, Sample_ID) %>%
+  distinct() %>%
+  count(CancerCode, name = "TotalSamples")
+
+# Long format
+mutation_long <- data %>%
+  pivot_longer(
+    cols = -c(`studyID.sampleId`, FullStudyID, CancerCode, Sample_ID),
+    names_to = "Gene", values_to = "MutationStatus"
+  )
+
+# Filter mutations
+mutated_samples <- mutation_long %>%
+  filter(!is.na(MutationStatus) & MutationStatus != 0)
+
+# Mutation counts
+mutation_counts <- mutated_samples %>%
+  group_by(CancerCode, Gene) %>%
+  summarise(MutatedSamples = n_distinct(Sample_ID), .groups = "drop")
+
+# Frequency calculation
+mutation_freq <- mutation_counts %>%
+  left_join(sample_counts, by = "CancerCode") %>%
+  mutate(MutationFrequency = 100 * MutatedSamples / TotalSamples)
+
+# Remove "Altered" gene and sort genes alphabetically
+mutation_freq <- mutation_freq %>%
+  filter(Gene != "Altered") %>%
+  arrange(Gene)
+
+# Wide format for heatmap
+heatmap_data <- mutation_freq %>%
+  select(Gene, CancerCode, MutationFrequency) %>%
+  pivot_wider(names_from = CancerCode, values_from = MutationFrequency, values_fill = 0)
+
+# Prepare matrix
+heatmap_matrix <- as.data.frame(heatmap_data)
+rownames(heatmap_matrix) <- heatmap_matrix$Gene
+heatmap_matrix$Gene <- NULL
+heatmap_matrix <- as.matrix(heatmap_matrix)
+
+# TCGA code to full name mapping
+cancer_code_map <- c(
+  "ACC"="Adrenocortical Carcinoma", "BLCA"="Bladder Urothelial Carcinoma",
+  "BRCA"="Breast Invasive Carcinoma", "CESC"="Cervical Squamous Cell Carcinoma",
+  "CHOL"="Cholangiocarcinoma", "COAD"="Colon Adenocarcinoma",
+  "DLBC"="Diffuse Large B-Cell Lymphoma", "ESCA"="Esophageal Carcinoma",
+  "GBM"="Glioblastoma Multiforme", "HNSC"="Head and Neck Squamous Cell Carcinoma",
+  "KICH"="Kidney Chromophobe", "KIRC"="Kidney Renal Clear Cell Carcinoma",
+  "KIRP"="Kidney Renal Papillary Cell Carcinoma", "LAML"="Acute Myeloid Leukemia",
+  "LGG"="Brain Lower Grade Glioma", "LIHC"="Liver Hepatocellular Carcinoma",
+  "LUAD"="Lung Adenocarcinoma", "LUSC"="Lung Squamous Cell Carcinoma",
+  "MESO"="Mesothelioma", "OV"="Ovarian Serous Cystadenocarcinoma",
+  "PAAD"="Pancreatic Adenocarcinoma", "PCPG"="Pheochromocytoma and Paraganglioma",
+  "PRAD"="Prostate Adenocarcinoma", "READ"="Rectum Adenocarcinoma",
+  "SARC"="Sarcoma", "SKCM"="Skin Cutaneous Melanoma",
+  "STAD"="Stomach Adenocarcinoma", "TGCT"="Testicular Germ Cell Tumours",
+  "THCA"="Thyroid Carcinoma", "THYM"="Thymoma",
+  "UCEC"="Uterine Corpus Endometrial Carcinoma", "UCS"="Uterine Carcinosarcoma",
+  "UVM"="Uveal Melanoma"
+)
+
+# Rename columns from codes to full names
+colnames(heatmap_matrix) <- ifelse(
+  !is.na(cancer_code_map[colnames(heatmap_matrix)]),
+  cancer_code_map[colnames(heatmap_matrix)],
+  colnames(heatmap_matrix)
+)
+
+# Define breaks - more granularity at low mutation frequencies
+breaks <- c(seq(0, 5, length.out = 50), seq(5.1, 100, length.out = 50))
+
+# Color palette: white to steelblue4 to midnightblue (darker)
+colors <- c(
+  colorRampPalette(c("white", "steelblue4"))(50),
+  colorRampPalette(c("steelblue4", "midnightblue"))(49)
+)
+pheatmap(
+  heatmap_matrix,
+  cluster_rows = FALSE,
+  cluster_cols = FALSE,
+  color = colors,
+  fontsize_row = 8,
+  fontsize_col = 8,
+  angle_col = 90,
+  cellwidth = 7,
+  cellheight = 7,
+)
