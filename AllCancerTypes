@@ -1,106 +1,192 @@
-library(tidyr)
+# Install & load required packages ------------------------------------------------
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+if (!requireNamespace("ComplexHeatmap", quietly = TRUE)) {
+  BiocManager::install("ComplexHeatmap")
+}
+if (!requireNamespace("circlize", quietly = TRUE)) {
+  install.packages("circlize")
+}
+if (!requireNamespace("dplyr", quietly = TRUE)) {
+  install.packages("dplyr")
+}
+if (!requireNamespace("tidyr", quietly = TRUE)) {
+  install.packages("tidyr")
+}
+
+library(ComplexHeatmap)
+library(circlize)
 library(dplyr)
-library(stringr)
-library(pheatmap)
+library(tidyr)
 
-# Load data
-data <- read.delim("C:/Users/mrzsjs1/Downloads/sample_matrix (7).txt", stringsAsFactors = FALSE)
+# Suppress ComplexHeatmap startup messages
+ht_opt$message <- FALSE
 
-# Extract fields
-data <- data %>%
-  mutate(
-    FullStudyID = str_extract(`studyID.sampleId`, "^[^:]+"),
-    CancerCode = toupper(str_extract(FullStudyID, "^[a-zA-Z]+")),
-    Sample_ID = str_extract(`studyID.sampleId`, "(?<=:).*")
+# 1. Load your data matrix ----------------------------------------------------
+file_path <- "C:/Users/mrzsjs1/Downloads/sample_matrix (7).txt"
+data_matrix <- read.table(file_path, header = TRUE, row.names = 1, sep = "\t", check.names = FALSE)
+data_matrix <- as.matrix(data_matrix)
+
+# 2. Extract tumor codes from sample IDs --------------------------------------
+sample_ids <- rownames(data_matrix)
+tumor_types <- toupper(sub("_tcga.*", "", sub(":.*", "", sample_ids)))
+
+# 3. Convert data to long format with tumor type column ------------------------
+df <- as.data.frame(data_matrix)
+df$tumor_type <- tumor_types
+df$sample_id <- sample_ids
+
+df_long <- pivot_longer(
+  df,
+  cols = -c(sample_id, tumor_type),
+  names_to = "gene",
+  values_to = "mutation"
+)
+
+# 4. Calculate mutation frequency (%) per gene per tumor type ------------------
+mutation_freq <- df_long %>%
+  group_by(tumor_type, gene) %>%
+  summarise(
+    mutated_samples = sum(mutation > 0, na.rm = TRUE),
+    total_samples = n(),
+    mutation_freq_percent = (mutated_samples / total_samples) * 100,
+    .groups = "drop"
   )
 
-# Sample counts
-sample_counts <- data %>%
-  select(CancerCode, Sample_ID) %>%
-  distinct() %>%
-  count(CancerCode, name = "TotalSamples")
-
-# Long format
-mutation_long <- data %>%
-  pivot_longer(
-    cols = -c(`studyID.sampleId`, FullStudyID, CancerCode, Sample_ID),
-    names_to = "Gene", values_to = "MutationStatus"
-  )
-
-# Filter mutations
-mutated_samples <- mutation_long %>%
-  filter(!is.na(MutationStatus) & MutationStatus != 0)
-
-# Mutation counts
-mutation_counts <- mutated_samples %>%
-  group_by(CancerCode, Gene) %>%
-  summarise(MutatedSamples = n_distinct(Sample_ID), .groups = "drop")
-
-# Frequency calculation
-mutation_freq <- mutation_counts %>%
-  left_join(sample_counts, by = "CancerCode") %>%
-  mutate(MutationFrequency = 100 * MutatedSamples / TotalSamples)
-
-# Remove "Altered" gene and sort genes alphabetically
-mutation_freq <- mutation_freq %>%
-  filter(Gene != "Altered") %>%
-  arrange(Gene)
-
-# Wide format for heatmap
+# 5. Reshape to wide matrix: rows = tumor types, columns = genes ---------------
 heatmap_data <- mutation_freq %>%
-  select(Gene, CancerCode, MutationFrequency) %>%
-  pivot_wider(names_from = CancerCode, values_from = MutationFrequency, values_fill = 0)
+  select(tumor_type, gene, mutation_freq_percent) %>%
+  pivot_wider(names_from = gene, values_from = mutation_freq_percent, values_fill = 0)
 
-# Prepare matrix
+# Convert to matrix ------------------------------------------------------------
 heatmap_matrix <- as.data.frame(heatmap_data)
-rownames(heatmap_matrix) <- heatmap_matrix$Gene
-heatmap_matrix$Gene <- NULL
+rownames(heatmap_matrix) <- heatmap_matrix$tumor_type
+heatmap_matrix$tumor_type <- NULL
 heatmap_matrix <- as.matrix(heatmap_matrix)
 
-# TCGA code to full name mapping
-cancer_code_map <- c(
-  "ACC"="Adrenocortical Carcinoma", "BLCA"="Bladder Urothelial Carcinoma",
-  "BRCA"="Breast Invasive Carcinoma", "CESC"="Cervical Squamous Cell Carcinoma",
-  "CHOL"="Cholangiocarcinoma", "COAD"="Colon Adenocarcinoma",
-  "DLBC"="Diffuse Large B-Cell Lymphoma", "ESCA"="Esophageal Carcinoma",
-  "GBM"="Glioblastoma Multiforme", "HNSC"="Head and Neck Squamous Cell Carcinoma",
-  "KICH"="Kidney Chromophobe", "KIRC"="Kidney Renal Clear Cell Carcinoma",
-  "KIRP"="Kidney Renal Papillary Cell Carcinoma", "LAML"="Acute Myeloid Leukemia",
-  "LGG"="Brain Lower Grade Glioma", "LIHC"="Liver Hepatocellular Carcinoma",
-  "LUAD"="Lung Adenocarcinoma", "LUSC"="Lung Squamous Cell Carcinoma",
-  "MESO"="Mesothelioma", "OV"="Ovarian Serous Cystadenocarcinoma",
-  "PAAD"="Pancreatic Adenocarcinoma", "PCPG"="Pheochromocytoma and Paraganglioma",
-  "PRAD"="Prostate Adenocarcinoma", "READ"="Rectum Adenocarcinoma",
-  "SARC"="Sarcoma", "SKCM"="Skin Cutaneous Melanoma",
-  "STAD"="Stomach Adenocarcinoma", "TGCT"="Testicular Germ Cell Tumours",
-  "THCA"="Thyroid Carcinoma", "THYM"="Thymoma",
-  "UCEC"="Uterine Corpus Endometrial Carcinoma", "UCS"="Uterine Carcinosarcoma",
-  "UVM"="Uveal Melanoma"
+# 6. Define tumor code to full name mapping ------------------------------------
+tumor_code_to_name <- c(
+  ACC = "Adrenocortical Carcinoma",
+  BLCA = "Bladder Urothelial Carcinoma",
+  BRCA = "Breast Invasive Carcinoma",
+  CESC = "Cervical Squamous Cell Carcinoma",
+  CHOL = "Cholangiocarcinoma",
+  COAD = "Colon Adenocarcinoma",
+  COADREAD = "Colon & Rectum Adenocarcinoma",  # <- added mapping for COADREAD
+  DLBC = "Diffuse Large B-cell Lymphoma",
+  ESCA = "Esophageal Carcinoma",
+  GBM = "Glioblastoma Multiforme",
+  HNSC = "Head and Neck Squamous Cell Carcinoma",
+  KICH = "Kidney Chromophobe",
+  KIRC = "Kidney Renal Clear Cell Carcinoma",
+  KIRP = "Kidney Renal Papillary Cell Carcinoma",
+  LAML = "Acute Myeloid Leukemia",
+  LGG = "Brain Lower Grade Glioma",
+  LIHC = "Liver Hepatocellular Carcinoma",
+  LUAD = "Lung Adenocarcinoma",
+  LUSC = "Lung Squamous Cell Carcinoma",
+  MESO = "Mesothelioma",
+  OV = "Ovarian Serous Cystadenocarcinoma",
+  PAAD = "Pancreatic Adenocarcinoma",
+  PCPG = "Pheochromocytoma and Paraganglioma",
+  PRAD = "Prostate Adenocarcinoma",
+  READ = "Rectum Adenocarcinoma",
+  SARC = "Sarcoma",
+  SKCM = "Skin Cutaneous Melanoma",
+  STAD = "Stomach Adenocarcinoma",
+  TGCT = "Testicular Germ Cell Tumours",
+  THCA = "Thyroid Carcinoma",
+  THYM = "Thymoma",
+  UCEC = "Uterine Corpus Endometrial Carcinoma",
+  UCS = "Uterine Carcinosarcoma",
+  UVM = "Uveal Melanoma"
 )
 
-# Rename columns from codes to full names
-colnames(heatmap_matrix) <- ifelse(
-  !is.na(cancer_code_map[colnames(heatmap_matrix)]),
-  cancer_code_map[colnames(heatmap_matrix)],
-  colnames(heatmap_matrix)
-)
+mapped_row_names <- tumor_code_to_name[rownames(heatmap_matrix)]
+mapped_row_names[is.na(mapped_row_names)] <- rownames(heatmap_matrix)[is.na(mapped_row_names)]
+rownames(heatmap_matrix) <- mapped_row_names
 
-# Define breaks - more granularity at low mutation frequencies
-breaks <- c(seq(0, 5, length.out = 50), seq(5.1, 100, length.out = 50))
+# 7. Reorder genes: "Altered" first, others alphabetical -----------------------
+genes <- colnames(heatmap_matrix)
+if ("Altered" %in% genes) {
+  genes_ordered <- c("Altered", sort(setdiff(genes, "Altered")))
+} else {
+  genes_ordered <- sort(genes)
+}
+heatmap_matrix <- heatmap_matrix[, genes_ordered]
 
-# Color palette: white to steelblue4 to midnightblue (darker)
-colors <- c(
-  colorRampPalette(c("white", "steelblue4"))(50),
-  colorRampPalette(c("steelblue4", "midnightblue"))(49)
-)
-pheatmap(
+# 8. Transpose matrix so genes are rows, cancer types columns ------------------
+heatmap_matrix <- t(heatmap_matrix)
+
+# 9. Reorder columns (cancer types) to put "Acute Myeloid Leukemia" first -------
+col_order <- colnames(heatmap_matrix)
+aml_fullname <- "Acute Myeloid Leukemia"
+if (aml_fullname %in% col_order) {
+  col_order <- c(aml_fullname, sort(setdiff(col_order, aml_fullname)))
+  heatmap_matrix <- heatmap_matrix[, col_order]
+}
+
+# 10. Calculate total mutation % across all cancer types for each gene --------
+total_mutation <- colMeans(t(heatmap_matrix), na.rm = TRUE)
+total_mutation["Altered"] <- NA  # Set Altered to NA
+
+# 11. Prepare total mutation matrix for side heatmap --------------------------
+total_mutation_matrix <- matrix(total_mutation[genes_ordered], ncol = 1)
+rownames(total_mutation_matrix) <- genes_ordered
+colnames(total_mutation_matrix) <- "Total Mutation %"
+
+# 12. Define color functions ---------------------------------------------------
+main_colors <- colorRamp2(c(0, 9, 100), c("white", "steelblue", "midnightblue"))
+total_colors <- colorRamp2(c(0, 10), c("white", "midnightblue"))  # cap at 10%
+
+# 13. Open graphics device if Windows ------------------------------------------
+if (.Platform$OS.type == "windows") {
+  windows(width = 14, height = 10)
+}
+
+library(grid) # for unit()
+
+# 14. Plot heatmaps -------------------------------------------------------------
+main_heatmap <- Heatmap(
   heatmap_matrix,
+  name = "Mutation Frequency (%)",
+  col = main_colors,
   cluster_rows = FALSE,
-  cluster_cols = FALSE,
-  color = colors,
-  fontsize_row = 8,
-  fontsize_col = 8,
-  angle_col = 90,
-  cellwidth = 7,
-  cellheight = 7,
+  cluster_columns = FALSE,
+  show_row_names = TRUE,
+  show_column_names = TRUE,
+  row_names_gp = gpar(fontsize = 8),
+  column_names_gp = gpar(fontsize = 8),
+  column_names_rot = 90,
+  rect_gp = gpar(col = "grey90", lwd = 0.5),
+  column_title_gp = gpar(fontsize = 10, fontface = "bold"),
+  row_title_gp = gpar(fontsize = 10, fontface = "bold"),
+  use_raster = TRUE,
+  width = unit(ncol(heatmap_matrix) * 3, "mm"),
+  height = unit(nrow(heatmap_matrix) * 3, "mm")
 )
+
+total_heatmap <- Heatmap(
+  total_mutation_matrix,
+  name = "Total Mutation %",
+  col = total_colors,
+  cluster_rows = FALSE,
+  cluster_columns = FALSE,
+  show_row_names = TRUE,  # <-- show gene names here too
+  show_column_names = TRUE,
+  row_names_gp = gpar(fontsize = 8),
+  column_names_gp = gpar(fontsize = 8),
+  rect_gp = gpar(col = "grey90", lwd = 0.5),
+  width = unit(3, "mm"),
+  height = unit(nrow(total_mutation_matrix) * 3, "mm"),
+  na_col = "grey80"
+)
+
+# Combine and draw both heatmaps ----------------------------------------------
+draw(main_heatmap + total_heatmap, gap = unit(3, "mm"))
+
+# Save to PDF
+pdf("mutation_heatmap.pdf", width = 14, height = 10)
+draw(main_heatmap + total_heatmap, gap = unit(3, "mm"))
+dev.off()
